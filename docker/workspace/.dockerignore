@@ -1,0 +1,48 @@
+# =============================================================================
+# docker/workspace/.dockerignore
+#
+# Controls which files are sent to the Docker daemon when building the image.
+#
+# WHY this matters:
+#   When you run "docker build", Docker packages everything in the build
+#   context (the folder you point it to) and sends it to the daemon.
+#   Without .dockerignore, it would send node_modules (hundreds of MB),
+#   .git history, Angular cache, etc. — massively slowing every build.
+#
+# Rule: exclude anything that is not directly needed by the Dockerfile.
+# Our Dockerfile only installs system packages and global npm tools —
+# it doesn't COPY any project source code into the image.
+# So the ideal .dockerignore here excludes nearly everything.
+# =============================================================================
+
+# Source code — copied via bind-mount at runtime, not baked into the image
+api/
+frontend/
+
+# Git history — not needed inside the container
+.git/
+.gitignore
+
+# Node modules — will be installed fresh inside the container
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+**/dist/
+build/
+**/.angular/
+
+# Logs
+*.log
+logs/
+
+# Environment files — never bake secrets into an image
+.env
+.env.*
+
+# macOS metadata
+.DS_Store
+
+# Editor files
+.vscode/

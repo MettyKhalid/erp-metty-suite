@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Launches the HapiJS API with the Node.js debugger attached.
+      // Set breakpoints in any .ts file — tsx handles source maps automatically.
+      // Use: F5 (or Run → Start Debugging) with this config selected.
+      "name": "Debug API",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "${workspaceFolder}/api/node_modules/.bin/tsx",
+      "runtimeArgs": ["watch", "--inspect"],
+      "program": "${workspaceFolder}/api/src/server.ts",
+      "cwd": "${workspaceFolder}/api",
+      "env": {
+        "NODE_ENV": "development",
+        "DATABASE_URL": "postgresql://erp_user:erp_password@postgres:5432/erp_db"
+      },
+      "console": "integratedTerminal",
+      "sourceMaps": true
+    },
+    {
+      // Attaches to an already-running API (started with npm run dev).
+      // Useful when you want hot-reload AND breakpoints at the same time.
+      // Start the API first, then attach with this config.
+      "name": "Attach to running API",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "restart": true,
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}/api"
+    }
+  ]
+}

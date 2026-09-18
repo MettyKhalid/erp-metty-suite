@@ -1,0 +1,39 @@
+# ── Node ──────────────────────────────────────────────────────────────────────
+# Never commit node_modules — reinstalled from package.json on every machine.
+# The named Docker volumes handle this inside the container anyway.
+node_modules/
+
+# Compiled output — always regenerated from source
+dist/
+build/
+
+# ── Environment files ──────────────────────────────────────────────────────────
+# These contain secrets (DB passwords, JWT keys, API keys).
+# NEVER commit them. Use .env.example to document what variables are needed.
+.env
+.env.local
+.env.*.local
+
+# ── Angular ────────────────────────────────────────────────────────────────────
+# Angular's incremental build cache — large, machine-specific, regenerated
+frontend/.angular/
+frontend/dist/
+
+# ── Prisma ────────────────────────────────────────────────────────────────────
+# Generated client — rebuilt from schema.prisma, not needed in git
+**/.prisma/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+logs/
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ── VS Code ───────────────────────────────────────────────────────────────────
+# Personal settings stay local — each developer has their own preferences.
+# We DO commit extensions.json and launch.json (shared team config).
+.vscode/settings.json

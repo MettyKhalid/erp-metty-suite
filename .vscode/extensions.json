@@ -1,0 +1,40 @@
+{
+  // These extensions are recommended for all developers on this project.
+  // VS Code will show an "Install Recommended Extensions" prompt when
+  // someone opens this folder for the first time.
+  //
+  // Inside the DevContainer, devcontainer.json installs them automatically —
+  // this file is mainly for the rare case someone works outside the container.
+  "recommendations": [
+    // REQUIRED — without this, "Reopen in Container" won't appear
+    "ms-vscode-remote.remote-containers",
+
+    // Docker file editing and container explorer
+    "ms-azuretools.vscode-docker",
+
+    // Prisma schema: syntax highlighting, formatting, autocomplete
+    "prisma.prisma",
+
+    // Angular template type-checking and completions
+    "angular.ng-template",
+
+    // ESLint inline error reporting
+    "dbaeumer.vscode-eslint",
+
+    // Prettier auto-format on save
+    "esbenp.prettier-vscode",
+
+    // Shows the full error message next to the offending line
+    "usernamehw.errorlens",
+
+    // Git blame, history, code lens
+    "eamodio.gitlens",
+
+    // Test .http files against the API directly from VS Code
+    "humao.rest-client",
+
+    // SQL client panel — connect to PostgreSQL from the sidebar
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-pg"
+  ]
+}

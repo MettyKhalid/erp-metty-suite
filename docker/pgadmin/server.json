@@ -6,21 +6,14 @@
       "Group": "Servers",
 
       "Host": "postgres",
-      // "postgres" is the Docker service name — not "localhost".
-      // Inside Docker's bridge network, service names resolve as DNS hostnames.
-      // pgAdmin running in its container reaches the postgres container
-      // by this name, not by 127.0.0.1 (which would be pgAdmin itself).
 
       "Port": 5432,
 
       "MaintenanceDB": "erp_db",
-      // The database pgAdmin connects to first when you open the server.
 
       "Username": "erp_user",
 
       "SSLMode": "prefer",
-      // "prefer" = use SSL if available, fall back to plain if not.
-      // Fine for local development; use "require" in production.
 
       "Comment": "Auto-configured by DevContainer — local development only"
     }

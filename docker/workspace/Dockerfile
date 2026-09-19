@@ -10,13 +10,15 @@
 #   container and open separate terminal tabs for each.
 #   It keeps the setup simple and avoids networking complexity at this stage.
 #
-# WHY node:20-bullseye-slim and not alpine?
+# WHY node:20-bookworm-slim and not alpine?
 #   Alpine uses musl libc instead of glibc. Some npm packages with native
 #   bindings (node-gyp, bcrypt, canvas...) fail to compile on Alpine without
 #   extra workarounds. Debian "slim" gives us a safe, compatible base with
 #   a much smaller footprint than the full Debian image.
 #   Result: ~250 MB base vs ~80 MB alpine (but alpine causes hard-to-debug
 #   errors later, so the tradeoff is not worth it for a dev environment).
+#   We prefer Bookworm over Bullseye because it is the current Debian stable
+#   release and receives active security maintenance for the base image.
 #
 # WHY pin to "20" and not "latest"?
 #   "latest" would silently upgrade to Node 22 on the next docker pull,
@@ -24,7 +26,8 @@
 #   we get patch updates automatically but no breaking major upgrades.
 # =============================================================================
 
-FROM node:20-bullseye-slim
+FROM node:24-bookworm-slim
+
 
 # -----------------------------------------------------------------------------
 # Layer 1 — System packages

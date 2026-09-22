@@ -1,201 +1,177 @@
 # =============================================================================
 # docker/docker-compose.yml
 #
-# This file grows across steps:
-#   Step 3 (now)  →  postgres + pgadmin only
-#   Step 4        →  adds the workspace service
+# Step 4: full stack — postgres + pgadmin + workspace
 #
-# We intentionally start with just the database layer so you can verify
-# PostgreSQL is healthy and schemas exist before adding more services.
+# What changed from Step 3:
+#   • Added "workspace" service (the Node.js dev container)
+#   • Added two named volumes for node_modules (performance on macOS)
+#   • DATABASE_URL environment variable wires workspace → postgres
 # =============================================================================
-# =============================================================================
-# NETWORKS
-#
-# All services that need to talk to each other must be on the same network.
-# Docker creates a default network, but defining one explicitly gives us:
-#   - A predictable name (erp_network) instead of a generated one
-#   - Clear documentation of which services are connected
-#   - The ability to add external services later without breaking existing ones
-#
-# "bridge" is the standard driver for single-host networking.
-# Each container on this network can reach others using the SERVICE NAME
-# as a hostname — so the API reaches postgres at host "postgres", port 5432.
-# =============================================================================
+
 networks:
   erp_network:
     driver: bridge
 
-# =============================================================================
-# VOLUMES
-#
-# Named volumes are managed entirely by Docker. On macOS with Docker Desktop
-# they live inside the Docker VM's virtual disk — pure Linux I/O, no macOS
-# filesystem overhead.
-#
-# Key property: named volumes PERSIST between "docker compose down" and
-# "docker compose up". Your database data survives container restarts.
-#
-# To completely wipe the database and start fresh:
-#   docker compose down -v       (-v removes volumes too)
-# =============================================================================
 volumes:
   postgres_data:
-    # Stores PostgreSQL's actual data files: tables, indexes, WAL logs.
-    # Losing this volume = losing all data. Back it up before "down -v".
-
   pgadmin_data:
-    # Stores pgAdmin's user preferences, saved queries, and session data.
-    # Less critical — losing it just means you reconfigure the UI.
 
-# =============================================================================
-# SERVICES
-# =============================================================================
+  # ── NEW in Step 4 ──────────────────────────────────────────────────────────
+  # Named volumes for node_modules.
+  #
+  # WHY not just let node_modules live in the bind-mount?
+  #
+  # On macOS, Docker Desktop routes bind-mounts through a translation layer
+  # between the macOS filesystem and the Docker Linux VM. This is fast enough
+  # for source files (you edit a .ts file, the change is visible immediately),
+  # but node_modules contains tens of thousands of tiny files. Every npm install
+  # would write all of them through that translation layer — extremely slow.
+  #
+  # Named volumes live entirely inside the Docker VM's virtual disk. There is
+  # no macOS <-> Linux translation — it is native Linux I/O. npm install runs
+  # at full speed.
+  #
+  # HOW it works with bind-mounts:
+  # The project root is bind-mounted to /workspace (delegated mode).
+  # That would normally include /workspace/api/node_modules.
+  # By declaring a named volume at that exact sub-path, Docker "shadows"
+  # the bind-mount at that directory — the volume takes priority.
+  # Your Mac never sees node_modules; the container reads/writes it natively.
+  workspace_api_modules:
+  workspace_frontend_modules:
+
 services:
   # ---------------------------------------------------------------------------
-  # PostgreSQL 16
+  # PostgreSQL 16 — unchanged from Step 3
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
-    # WHY 16-alpine?
-    #   "16"      → pin the major version; never use "latest" (silent upgrades
-    #               can break schema compatibility between major PG versions)
-    #   "alpine"  → Debian-based image is ~400 MB; Alpine variant is ~80 MB.
-    #               For PostgreSQL specifically, Alpine is safe — the postgres
-    #               binary doesn't use musl-incompatible native npm packages
-    #               the way Node.js does.
-
     container_name: erp_postgres
-    # A fixed name lets you run "docker logs erp_postgres" without looking
-    # up the generated container ID.
-
     restart: unless-stopped
-    # Restart policy options:
-    #   "no"             → never restart automatically (default)
-    #   "always"         → restart even after manual stop (annoying in dev)
-    #   "unless-stopped" → restart on crash or daemon restart, but NOT after
-    #                      "docker stop" — the best balance for development
-
     networks:
       - erp_network
-
     environment:
-      # These env vars are read by the postgres image entrypoint on first boot.
-      # They create the database, user, and password.
-      POSTGRES_DB: erp_db # The database to create
-      POSTGRES_USER: erp_user # The superuser for this database
-      POSTGRES_PASSWORD: erp_password # Their password
+      POSTGRES_DB: erp_db
+      POSTGRES_USER: erp_user
+      POSTGRES_PASSWORD: erp_password
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=en_US.UTF-8"
-      # WHY force UTF-8?
-      #   The default locale depends on the base image and can vary.
-      #   Explicitly setting UTF-8 ensures correct storage of international
-      #   characters (Arabic, accented Latin, etc.) regardless of environment.
-
     ports:
       - "5432:5432"
-      # FORMAT: "host_port:container_port"
-      #
-      # This publishes port 5432 from inside the container to port 5432
-      # on your Mac (via Docker Desktop's port forwarding).
-      #
-      # Two use cases:
-      #   1. Your Mac tools (TablePlus, Postico, DBeaver) connect to localhost:5432
-      #   2. The DevContainer's SQLTools extension connects to localhost:5432
-      #
-      # Services inside the Docker network use "postgres:5432" (service name),
-      # NOT "localhost:5432" — that distinction is important and a common source
-      # of confusion when writing DATABASE_URL environment variables.
-
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Mounts the named volume at the path where postgres stores all its data.
-      # Without this, every "docker compose down" wipes the database.
-
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-      # Bind-mount: maps our local init.sql into the special directory the
-      # postgres image scans on first boot.
-      #
-      # "01-" prefix: files in initdb.d are executed in alphabetical order.
-      #   If you add more init files later (02-roles.sql, 03-seed.sql...),
-      #   the prefix controls execution order.
-      #
-      # ":ro" (read-only): the container can read the file but not modify it.
-      #   Best practice for any config file bind-mounted into a container.
-      #
-      # The path is relative to THIS docker-compose.yml file (docker/).
-
     healthcheck:
-      # Docker uses this to determine when postgres is truly ready to accept
-      # connections (not just running). Other services use:
-      #   depends_on:
-      #     postgres:
-      #       condition: service_healthy
-      # to wait for this check to pass before starting.
-      #
-      # Without healthcheck + depends_on, pgAdmin might try to connect to
-      # postgres before it's finished initializing and fail.
       test: ["CMD-SHELL", "pg_isready -U erp_user -d erp_db"]
-      interval: 10s # Check every 10 seconds
-      timeout: 5s # Consider failed if no response within 5 seconds
-      retries: 5 # Mark unhealthy after 5 consecutive failures
+      interval: 10s
+      timeout: 5s
+      retries: 5
       start_period: 20s
-      # start_period: grace period before checks begin.
-      # On first boot, postgres runs init.sql (creating extensions, schemas,
-      # functions) which takes a few seconds. Without this grace period, the
-      # healthcheck might fail before init is complete and mark the container
-      # unhealthy prematurely.
 
   # ---------------------------------------------------------------------------
-  # pgAdmin 4
+  # pgAdmin 4 — unchanged from Step 3 (with email fix)
   # ---------------------------------------------------------------------------
   pgadmin:
     image: dpage/pgadmin4:latest
-    # pgAdmin doesn't have the same major-version compatibility concerns as
-    # PostgreSQL, so "latest" is acceptable here. Pin to a specific version
-    # (e.g. dpage/pgadmin4:8.4) if you want fully reproducible builds.
-
     container_name: erp_pgadmin
-
     restart: unless-stopped
+    networks:
+      - erp_network
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@erp.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
 
+  # ---------------------------------------------------------------------------
+  # Workspace — NEW in Step 4
+  #
+  # This is the Node.js container where both the HapiJS API and Angular
+  # frontend will run during development.
+  # ---------------------------------------------------------------------------
+  workspace:
+    build:
+      context: ..
+      # "context" is the directory Docker packages and sends to the daemon.
+      # ".." means the project root (one level up from docker/).
+      # This is necessary because the Dockerfile copies nothing from disk —
+      # but Docker still needs a build context to execute the build in.
+      # The .dockerignore file in docker/workspace/ controls what gets sent.
+
+      dockerfile: docker/workspace/Dockerfile
+      # Path to the Dockerfile, relative to the context (project root).
+
+    container_name: erp_workspace
+    restart: unless-stopped
     networks:
       - erp_network
 
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@erp.dev
-      PGADMIN_DEFAULT_PASSWORD: admin
-      # These are the credentials you use to log in to the pgAdmin web UI.
-      # They are not related to the PostgreSQL user — pgAdmin is a separate app.
+      NODE_ENV: development
 
-      PGADMIN_CONFIG_SERVER_MODE: "False"
-      # Server mode = False means single-user desktop mode.
-      # In server mode, pgAdmin shows a login screen and manages multiple users.
-      # For local development, this is unnecessary friction — disable it.
-
-      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
-      # The master password encrypts saved server passwords in pgAdmin.
-      # Disable for local dev — you'd need to enter it every time you rebuild.
+      DATABASE_URL: postgresql://erp_user:erp_password@postgres:5432/erp_db
+      # -----------------------------------------------------------------------
+      # This is the most important environment variable in the project.
+      # It tells Prisma (and any raw pg client) how to connect to the database.
+      #
+      # Anatomy of the URL:
+      #   postgresql://       protocol (also valid: postgres://)
+      #   erp_user            database user
+      #   :erp_password       their password
+      #   @postgres           HOST — the Docker SERVICE NAME, not "localhost".
+      #                       "postgres" resolves to the postgres container IP
+      #                       on erp_network via Docker's built-in DNS.
+      #   :5432               port (PostgreSQL default)
+      #   /erp_db             database name
+      #
+      # Common mistake: using @localhost:5432 here.
+      # "localhost" inside a container means the container itself — not the
+      # postgres container. That gives you "connection refused" every time.
+      # -----------------------------------------------------------------------
 
     ports:
-      - "5050:80"
-      # pgAdmin's web server runs on port 80 inside the container.
-      # We map it to port 5050 on your Mac.
-      # Open http://localhost:5050 in your browser after "docker compose up".
+      - "3000:3000" # HapiJS API  -> http://localhost:3000
+      - "4200:4200" # Angular     -> http://localhost:4200
 
     volumes:
-      - pgadmin_data:/var/lib/pgadmin
-      # Persists pgAdmin settings, saved queries, and UI preferences.
-
-      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
-      # Pre-loads our ERP Local server definition.
-      # Without this, every time you rebuild the container you would need to
-      # manually add the postgres connection in the pgAdmin UI.
+      - ..:/workspace:delegated
+      # Bind-mount the entire project root into /workspace inside the container.
       #
-      # The server appears automatically but pgAdmin will still ask for the
-      # password on first connection — enter: erp_password
+      # ":delegated" consistency mode:
+      #   On macOS, container writes (compiled files, generated code) are
+      #   buffered before being synced back to the macOS filesystem.
+      #   This prioritises container write speed — important for Angular's
+      #   incremental build cache and TypeScript compilation output.
+      #   For source files you edit on the Mac side, changes are visible
+      #   inside the container almost immediately.
+      #
+      # The path ".." is relative to docker-compose.yml (inside docker/).
+      # So ".." resolves to the project root — erp-suite/.
+
+      - workspace_api_modules:/workspace/api/node_modules
+      # This named volume "shadows" api/node_modules from the bind-mount above.
+      # Result: npm install for the API runs at native Linux speed.
+
+      - workspace_frontend_modules:/workspace/frontend/node_modules
+      # Same for the Angular frontend's node_modules.
 
     depends_on:
       postgres:
         condition: service_healthy
-      # pgAdmin only starts after the postgres healthcheck passes.
-      # This prevents the "connection refused" error you'd see if pgAdmin
-      # tried to connect during postgres's initialization phase.
+      # The workspace container starts only after postgres passes its
+      # healthcheck. This prevents Prisma from trying to connect to a
+      # database that is not ready yet when we run migrations on startup.
+
+    # Keeps the container alive so you can open a terminal inside it.
+    # In Step 5, devcontainer.json overrides this with "sleep infinity"
+    # for VS Code attachment. Both achieve the same thing — a process
+    # that never exits so the container stays running.
+    command: tail -f /dev/null

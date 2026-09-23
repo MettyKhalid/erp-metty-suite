@@ -1,0 +1,147 @@
+{
+  // ===========================================================================
+  // .devcontainer/devcontainer.json
+  //
+  // This is the file VS Code reads when you click "Reopen in Container".
+  // It answers three questions:
+  //   1. Which container do you want me to attach to?
+  //   2. How should my editor behave inside that container?
+  //   3. What should run after the container starts?
+  // ===========================================================================
+
+  "name": "ERP Business Suite",
+
+  // ── Compose integration ────────────────────────────────────────────────────
+  // VS Code merges these two files — second overrides the first where keys clash.
+  // Paths are relative to THIS file (.devcontainer/).
+  "dockerComposeFile": [
+    "../docker/docker-compose.yml",
+    "docker-compose.devcontainer.yml"
+  ],
+
+  // The service VS Code attaches its terminal and file explorer to.
+  // Must match a key under "services:" in the merged compose files.
+  "service": "workspace",
+
+  // The path inside the container VS Code treats as the project root.
+  "workspaceFolder": "/workspace",
+
+  // When you close VS Code, stop ALL compose services — not just workspace.
+  "shutdownAction": "stopCompose",
+
+  // ── Features ───────────────────────────────────────────────────────────────
+  // Modular setup scripts that install tools inside the container image
+  // after it is built — no Dockerfile changes required.
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20",
+      "nvmVersion": "latest"
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  // ── VS Code customizations ─────────────────────────────────────────────────
+  // These settings apply ONLY when connected to this container.
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // TypeScript / Node
+        "ms-vscode.vscode-typescript-next",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        // Prisma — schema syntax, format, jump-to-definition
+        "prisma.prisma",
+        // Angular — template type-checking, completions
+        "angular.ng-template",
+        // Docker
+        "ms-azuretools.vscode-docker",
+        // Database — SQL client in the sidebar
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg",
+        // DX
+        "usernamehw.errorlens",
+        "eamodio.gitlens",
+        "streetsidesoftware.code-spell-checker",
+        "humao.rest-client",
+        "firsttris.vscode-jest-runner"
+      ],
+
+      "settings": {
+        // Format every file on save
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        // ESLint auto-fix on save (separate pass from Prettier)
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        // Prefer relative imports
+        "js/ts.preferences.importModuleSpecifier": "relative",
+        // Hide generated dirs from the explorer
+        "files.exclude": {
+          "**/node_modules": true,
+          "**/.angular": true,
+          "**/dist": true
+        },
+        "files.trimTrailingWhitespace": true,
+        "files.insertFinalNewline": true,
+        // SQLTools: pre-configured connection to the postgres service.
+        // "postgres" resolves via Docker's internal DNS on erp_network.
+        "sqltools.connections": [
+          {
+            "name": "ERP Local",
+            "driver": "PostgreSQL",
+            "host": "postgres",
+            "port": 5432,
+            "database": "erp_db",
+            "username": "erp_user",
+            "password": "erp_password",
+            "previewLimit": 50
+          }
+        ]
+      }
+    }
+  },
+
+  // ── Port forwarding ────────────────────────────────────────────────────────
+  // Makes these container ports available as localhost on your Mac.
+  "forwardPorts": [3000, 4200, 5432, 5050],
+
+  "portsAttributes": {
+    "3000": {
+      "label": "HapiJS API",
+      "onAutoForward": "notify"
+    },
+    "4200": {
+      "label": "Angular Dev Server",
+      "onAutoForward": "openBrowser"
+    },
+    "5432": {
+      "label": "PostgreSQL",
+      "onAutoForward": "silent"
+    },
+    "5050": {
+      "label": "pgAdmin 4",
+      "onAutoForward": "notify"
+    }
+  },
+
+  // ── Lifecycle scripts ──────────────────────────────────────────────────────
+  // postCreateCommand → runs ONCE on first container creation
+  // postStartCommand  → runs on EVERY container start (must be fast)
+  "postCreateCommand": "bash /workspace/.devcontainer/scripts/post-create.sh",
+  "postStartCommand": "bash /workspace/.devcontainer/scripts/post-start.sh",
+
+  // ── Remote user ────────────────────────────────────────────────────────────
+  // Run as "node" (non-root, UID 1000) — pre-created in the node image.
+  // Docker Desktop on macOS handles UID mapping transparently.
+  "remoteUser": "node",
+
+  // Available in every terminal session AND in VS Code's own processes.
+  "remoteEnv": {
+    "NODE_ENV": "development",
+    "DATABASE_URL": "postgresql://erp_user:erp_password@postgres:5432/erp_db"
+  }
+}

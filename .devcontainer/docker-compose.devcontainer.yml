@@ -1,0 +1,54 @@
+# =============================================================================
+# .devcontainer/docker-compose.devcontainer.yml
+#
+# Dev-only overrides merged on top of docker/docker-compose.yml.
+# Only keys that differ from the base file need to appear here.
+#
+# WHY a separate file instead of editing docker-compose.yml directly?
+#   docker/docker-compose.yml works in any environment (staging, CI, prod).
+#   This file adds concerns that are purely local to a developer's machine:
+#     - Source code bind-mount (you don't bind-mount source in production)
+#     - Named volumes for node_modules (a macOS performance workaround)
+#     - "sleep infinity" command (VS Code needs to attach to a live container)
+#
+# The merge behaviour:
+#   Lists (like "volumes:") are appended — not replaced.
+#   Scalar values (like "command:") are replaced by the override.
+# =============================================================================
+
+services:
+  workspace:
+    volumes:
+      # ── Source code bind-mount ─────────────────────────────────────────────
+      # Maps the project root (one level up from .devcontainer/) into the
+      # container at /workspace.
+      #
+      # ":delegated" consistency mode:
+      #   On macOS, Docker Desktop bridges the Mac filesystem and its Linux VM.
+      #   "delegated" tells Docker: "the container's view of writes is
+      #   authoritative — sync back to the Mac whenever convenient."
+      #   This prioritises write speed inside the container, which matters for
+      #   TypeScript compilation, Angular incremental builds, and Prisma codegen.
+      #   Reads (you saving a file on the Mac) are still nearly instant.
+      - ..:/workspace:delegated
+
+      # ── Named volumes for node_modules ─────────────────────────────────────
+      # These are ALSO declared in docker-compose.yml but repeated here
+      # because docker-compose merges volumes lists by appending — not replacing.
+      # Without the mounts defined here, the volume declarations in the base
+      # file would exist but never be mounted anywhere useful.
+      #
+      # Effect: the /workspace/api/node_modules path inside the container is
+      # served from the named volume (pure Linux I/O), not from the bind-mount
+      # (Mac ↔ Linux VM bridge I/O). npm install runs ~10x faster as a result.
+      - workspace_api_modules:/workspace/api/node_modules
+      - workspace_frontend_modules:/workspace/frontend/node_modules
+
+    # ── Command override ──────────────────────────────────────────────────────
+    # Replace "tail -f /dev/null" from docker-compose.yml with "sleep infinity".
+    #
+    # Both achieve the same thing: keep the container alive indefinitely.
+    # We use "sleep infinity" specifically because VS Code's Dev Containers
+    # extension recognises it as a signal that the container is "managed" —
+    # it's the conventional placeholder command for DevContainer-attached containers.
+    command: sleep infinity
